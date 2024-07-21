@@ -23,6 +23,12 @@ using si = set<int>;
 using umii = unordered_map<int, int>;
 using umll = unordered_map<ll, ll>;
 
+
+double time_nodes(int x1, int y1, int x2, int y2, int s)
+{
+    return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2));
+}
+
 int main()
 {
     ios_base::sync_with_stdio(false), cin.tie(NULL);
@@ -39,7 +45,7 @@ int main()
         cin >> x >> y >> q >> e >> l >> s;
 
         v.push_back({x, y, q, e, l, s});
-        
+
     }
 
     return 0;
