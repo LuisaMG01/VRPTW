@@ -1,12 +1,12 @@
 import os
 import openpyxl
 from openpyxl import Workbook
-from openpyxl.styles import Font
 import math
 import time
+import random
 
-OUTPUT_FILE = 'VRPTW_LuisaMariaAlvarez_constructive.xlsx'
-INSTANCES_DIR = 'instances'  
+OUTPUT_FILE = 'VRPTW_LuisaMariaAlvarez_GRASP.xlsx'
+INSTANCES_DIR = 'instances'
 
 class Node:
     def __init__(self, id, x, y, demand, early, late, service_time):
@@ -27,36 +27,38 @@ class Vehicle:
         self.arrival_times = []
 
 class VRPTW:
-    def __init__(self, nodes, vehicle_capacity):
+    def __init__(self, nodes, vehicle_capacity, alpha=0.1):
         self.nodes = nodes
         self.vehicle_capacity = vehicle_capacity
         self.depot = nodes[0]
         self.vehicles = []
+        self.alpha = alpha
 
     def distance(self, node1, node2):
-        return round(math.sqrt((node1.x - node2.x)**2 + (node1.y - node2.y)**2), 3)
+        return round(math.sqrt((node1.x - node2.x) ** 2 + (node1.y - node2.y) ** 2), 3)
 
     def calculate_total_distance(self):
         total_distance = 0
         for vehicle in self.vehicles:
             route = vehicle.route
             for i in range(len(route) - 1):
-                total_distance += self.distance(route[i], route[i+1])
+                total_distance += self.distance(route[i], route[i + 1])
         return round(total_distance, 3)
 
     def is_feasible(self, vehicle, node):
         if vehicle.load + node.demand > vehicle.capacity:
             return False
-        
+
         arrival_time = vehicle.time + self.distance(vehicle.route[-1], node)
-        
+
         if arrival_time > node.late:
             return False
+
         return_time_to_depot = max(arrival_time, node.early) + node.service_time + self.distance(node, self.depot)
 
         if return_time_to_depot > self.depot.late:
             return False
-        
+
         return True
 
     def update_vehicle(self, vehicle, node):
@@ -71,36 +73,67 @@ class VRPTW:
         unassigned = self.nodes[1:]
         max_attempts = len(self.nodes) * 2
         attempts = 0
-        
+
         while unassigned and attempts < max_attempts:
             vehicle = Vehicle(self.vehicle_capacity)
             vehicle.route = [self.depot]
             vehicle.time = 0
             vehicle.arrival_times = [0]
             assigned_any = False
-            
+
             while True:
                 feasible_nodes = [node for node in unassigned if self.is_feasible(vehicle, node)]
-                
+
                 if not feasible_nodes:
                     break
-                
-                next_node = min(feasible_nodes, key=lambda node: self.distance(vehicle.route[-1], node))
-                
+
+                feasible_nodes.sort(key=lambda node: self.distance(vehicle.route[-1], node))
+                rcl_size = max(1, int(len(feasible_nodes) * self.alpha))
+                rcl = feasible_nodes[:rcl_size]
+
+                next_node = random.choice(rcl)
+
                 self.update_vehicle(vehicle, next_node)
                 unassigned.remove(next_node)
                 assigned_any = True
-            
+
             vehicle.route.append(self.depot)
             vehicle.arrival_times.append(round(vehicle.time + self.distance(vehicle.route[-2], self.depot), 3))
             self.vehicles.append(vehicle)
-            
+
             if not assigned_any:
                 attempts += 1
             else:
                 attempts = 0
-        
+
         return self.vehicles
+
+    def two_opt(self, route):
+        best_route = route
+        best_distance = self.calculate_route_distance(route)
+
+        for i in range(1, len(route) - 2):
+            for j in range(i + 1, len(route) - 1):
+                new_route = route[:i] + route[i:j + 1][::-1] + route[j + 1:]
+                new_distance = self.calculate_route_distance(new_route)
+
+                if new_distance < best_distance:
+                    best_route = new_route
+                    best_distance = new_distance
+
+        return best_route
+
+    def calculate_route_distance(self, route):
+        total_distance = 0
+        for i in range(len(route) - 1):
+            total_distance += self.distance(route[i], route[i + 1])
+        return total_distance
+
+    def local_search(self, solution):
+        for vehicle in solution:
+            improved_route = self.two_opt(vehicle.route)
+            vehicle.route = improved_route
+        return solution
 
 def read_instance(filename):
     with open(filename, 'r') as f:
@@ -124,7 +157,7 @@ def save_results_to_excel(instance_name, vehicles, total_distance, computation_t
 
     sheet.append(['Number of Vehicles', 'Total Distance', 'Computation Time'])
     sheet.append([len(used_vehicles), round(total_distance, 3), round(computation_time, 3)])
-    
+
     sheet.append(['Number of Nodes', 'Route', 'Arrival Times', 'Total Load'])
     for vehicle in used_vehicles:
         route = [node.id for node in vehicle.route]
@@ -133,13 +166,13 @@ def save_results_to_excel(instance_name, vehicles, total_distance, computation_t
 
     workbook.save(OUTPUT_FILE)
 
-
 def solve_instance(instance_path):
     nodes, capacity = read_instance(instance_path)
     vrptw = VRPTW(nodes, capacity)
 
     start_time = time.time()
     solution = vrptw.construct_solution()
+    solution = vrptw.local_search(solution)
     end_time = time.time()
 
     computation_time = (end_time - start_time) * 1000  
@@ -148,6 +181,23 @@ def solve_instance(instance_path):
     routes = [(vehicle.route, vehicle.arrival_times[-1], vehicle.load) for vehicle in solution]
 
     return solution, total_distance, computation_time, routes, capacity
+
+def grasp(instance, max_iterations=10, alpha=0.1):
+    best_solution = None
+    best_distance = float('inf')
+
+    for _ in range(max_iterations):
+        vrptw = VRPTW(instance.nodes, instance.vehicle_capacity, alpha)
+        solution = vrptw.construct_solution()
+        solution = vrptw.local_search(solution)
+
+        total_distance = vrptw.calculate_total_distance()
+
+        if total_distance < best_distance:
+            best_solution = solution
+            best_distance = total_distance
+
+    return best_solution, best_distance
 
 def main():
     for instance_filename in os.listdir(INSTANCES_DIR):
