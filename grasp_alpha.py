@@ -5,7 +5,7 @@ import math
 import time
 import random
 
-OUTPUT_FILE = 'VRPTW_LuisaMariaAlvarez_GRASP.xlsx'
+OUTPUT_FILE = 'VRPTW_LuisaMariaAlvarez_GRASPALPHA.xlsx'
 INSTANCES_DIR = 'instances'
 
 class Node:
