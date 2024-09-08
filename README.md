@@ -42,7 +42,7 @@ The Two-Opt algorithm works iteratively, trying to improve each route by reducin
 - constructive.py: This file contains the constructive heuristic algorithm.
 - grasp_alpha.py: This file contains the GRASP algorithm based on alpha.
 - grasp_cardinality.py: This file contains the GRASP algorithm based in cardinality.
-- lower_bound.py: This file calculates the lower bound for all instances and is used to calculate the GAP into the analysis.xlsx.+
+- lower_bound.py: This file calculates the lower bound for all instances and is used to calculate the GAP into the analysis.xlsx.
 
 
 ## Usage 
