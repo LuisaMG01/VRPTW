@@ -33,7 +33,7 @@ class VRPTW:
         self.vehicle_capacity = vehicle_capacity
         self.depot = nodes[0]
         self.vehicles = []
-        self.RCL_SIZE = 3  # Tamaño del RCL para el GRASP de cardinalidad
+        self.RCL_SIZE = 3 
 
     def distance(self, node1, node2):
         return round(math.sqrt((node1.x - node2.x)**2 + (node1.y - node2.y)**2), 3)
@@ -87,14 +87,12 @@ class VRPTW:
                 if not feasible_nodes:
                     break
                 
-                # Ordenar nodos factibles por distancia al último nodo en la ruta actual
+               
                 feasible_nodes.sort(key=lambda node: self.distance(vehicle.route[-1], node))
                 
-                # Crear el RCL con tamaño fijo (cardinalidad)
                 rcl_size = min(self.RCL_SIZE, len(feasible_nodes))
                 rcl = feasible_nodes[:rcl_size]
                 
-                # Seleccionar aleatoriamente el siguiente nodo del RCL
                 next_node = random.choice(rcl)
                 
                 self.update_vehicle(vehicle, next_node)
@@ -132,15 +130,15 @@ def save_results_to_excel(instance_name, vehicles, total_distance, computation_t
 
     used_vehicles = [vehicle for vehicle in vehicles if len(vehicle.route) > 2]
 
-    sheet.append(['Number of Vehicles', 'Total Distance', 'Computation Time'])
     sheet.append([len(used_vehicles), round(total_distance, 3), round(computation_time, 3)])
     
-    sheet.append(['Number of Nodes', 'Route', 'Arrival Times', 'Total Load'])
     for vehicle in used_vehicles:
         route = [node.id for node in vehicle.route]
         arrival_times = vehicle.arrival_times
-        sheet.append([len(route) - 2] + route + [round(arrival_times[-1], 3), vehicle_capacity - vehicle.load])
-
+        
+        route_info = [len(route) - 2] + route + arrival_times + [vehicle_capacity - vehicle.load]
+        sheet.append(route_info)
+        
     workbook.save(OUTPUT_FILE)
 
 

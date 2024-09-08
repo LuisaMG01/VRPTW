@@ -122,16 +122,17 @@ def save_results_to_excel(instance_name, vehicles, total_distance, computation_t
 
     used_vehicles = [vehicle for vehicle in vehicles if len(vehicle.route) > 2]
 
-    sheet.append(['Number of Vehicles', 'Total Distance', 'Computation Time'])
     sheet.append([len(used_vehicles), round(total_distance, 3), round(computation_time, 3)])
     
-    sheet.append(['Number of Nodes', 'Route', 'Arrival Times', 'Total Load'])
     for vehicle in used_vehicles:
         route = [node.id for node in vehicle.route]
         arrival_times = vehicle.arrival_times
-        sheet.append([len(route) - 2] + route + [round(arrival_times[-1], 3), vehicle_capacity - vehicle.load])
+
+        route_info = [len(route) - 2] + route + arrival_times + [vehicle_capacity - vehicle.load]
+        sheet.append(route_info)
 
     workbook.save(OUTPUT_FILE)
+
 
 
 def solve_instance(instance_path):

@@ -122,10 +122,8 @@ def save_results_to_excel(instance_name, vehicles, total_distance, computation_t
 
     used_vehicles = [vehicle for vehicle in vehicles if len(vehicle.route) > 2]
 
-    sheet.append(['Number of Vehicles', 'Total Distance', 'Computation Time', 'Lower Bound'])
     sheet.append([len(used_vehicles), round(total_distance, 3), round(computation_time, 3), lower_bound])
     
-    sheet.append(['Number of Nodes', 'Route', 'Arrival Times', 'Total Load'])
     for vehicle in used_vehicles:
         route = [node.id for node in vehicle.route]
         arrival_times = vehicle.arrival_times
@@ -134,14 +132,11 @@ def save_results_to_excel(instance_name, vehicles, total_distance, computation_t
     workbook.save(OUTPUT_FILE)
 
 def calculate_lower_bound(nodes, vehicle_capacity):
-    # 1. Calcular la distancia mínima necesaria (usando el árbol de expansión mínima)
     total_distance = minimum_spanning_tree_distance(nodes)
     
-    # 2. Calcular el número mínimo de vehículos necesarios
-    total_demand = sum(node.demand for node in nodes[1:])  # Excluimos el depósito
+    total_demand = sum(node.demand for node in nodes[1:]) 
     min_vehicles = math.ceil(total_demand / vehicle_capacity)
     
-    # 3. Calcular la cota inferior
     lower_bound = total_distance + 2 * (min_vehicles - 1) * min(
         math.sqrt((nodes[i].x - nodes[0].x)**2 + (nodes[i].y - nodes[0].y)**2)
         for i in range(1, len(nodes))
