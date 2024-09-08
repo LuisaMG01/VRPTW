@@ -61,6 +61,11 @@ To install the required libraries create a virtual enviroment and install the ``
 ```
 python -m venv venv
 ```
+To activate the enviroment run:
+```
+source venv/Scripts/activate
+
+```
 
 ```
 pip install -r requirements.txt
