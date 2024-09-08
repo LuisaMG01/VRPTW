@@ -73,6 +73,7 @@ python file_name.py
 ```
 After running the file, an excel file with the results will be created.
 
-
+**NOTE:**
+The url with the presentation of the project is: ```https://www.canva.com/design/DAGQG8Czkro/uOvZ-Ksjh1sIPglaQCA2LQ/view?utm_content=DAGQG8Czkro&utm_campaign=designshare&utm_medium=link&utm_source=editor```
 
 
