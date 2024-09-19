@@ -128,7 +128,7 @@ def save_results_to_excel(instance_name, vehicles, total_distance, computation_t
         route = [node.id for node in vehicle.route]
         arrival_times = vehicle.arrival_times
 
-        route_info = [len(route) - 2] + route + arrival_times + [vehicle_capacity - vehicle.load]
+        route_info = [len(route) - 2] + route + arrival_times + [vehicle.load]
         sheet.append(route_info)
 
     workbook.save(OUTPUT_FILE)
