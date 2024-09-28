@@ -46,32 +46,49 @@ class VRPTW:
         return round(total_distance, 3)
 
     def is_feasible(self, vehicle, node):
+        # Verificar la capacidad del vehículo
         if vehicle.load + node.demand > vehicle.capacity:
             return False
 
+        # Calcular el tiempo de llegada al nodo
         arrival_time = vehicle.time + self.distance(vehicle.route[-1], node)
 
+        # Verificar si el vehículo llega después del tiempo límite del nodo
         if arrival_time > node.late:
             return False
 
+        # Calcular el tiempo de regreso al depósito después de visitar este nodo
         return_time_to_depot = max(arrival_time, node.early) + node.service_time + self.distance(node, self.depot)
 
+        # Verificar si es posible regresar al depósito dentro de su ventana de tiempo
         if return_time_to_depot > self.depot.late:
             return False
 
         return True
 
     def update_vehicle(self, vehicle, node):
+        # Calcular el tiempo de llegada al nodo
+        arrival_time = vehicle.time + self.distance(vehicle.route[-1], node)
+
+        # Ajustar el inicio del servicio si el vehículo llega antes de la ventana de tiempo
+        service_start = max(arrival_time, node.early)
+
+        # Actualizar el tiempo del vehículo con el tiempo de servicio en el nodo
+        vehicle.time = service_start + node.service_time
+
+        # Actualizar la carga del vehículo y agregar el nodo a la ruta
         vehicle.route.append(node)
         vehicle.load += node.demand
-        arrival_time = vehicle.time + self.distance(vehicle.route[-2], node)
-        service_start = max(arrival_time, node.early)
-        vehicle.time = service_start + node.service_time
-        vehicle.arrival_times.append(round(arrival_time, 3))
+        vehicle.arrival_times.append(round(arrival_time, 3))  # Registrar el tiempo de llegada real
+
+        # Debugging: Imprimir información sobre el nodo agregado
+        print(f"Node {node.id} added to vehicle with arrival time {arrival_time} and start of service at {service_start}")
+        print(f"Current vehicle load: {vehicle.load}, current route: {[n.id for n in vehicle.route]}")
+        print(f"Vehicle arrival times: {vehicle.arrival_times}\n")
 
     def construct_solution(self):
-        unassigned = self.nodes[1:]
-        max_attempts = len(self.nodes) * 2
+        unassigned = self.nodes[1:]  # Nodos no asignados (todos menos el depósito)
+        max_attempts = len(self.nodes) * 2  # Número máximo de intentos
         attempts = 0
 
         while unassigned and attempts < max_attempts:
@@ -87,16 +104,18 @@ class VRPTW:
                 if not feasible_nodes:
                     break
 
+                # Ordenar los nodos factibles por la distancia al nodo actual
                 feasible_nodes.sort(key=lambda node: self.distance(vehicle.route[-1], node))
-                rcl_size = max(1, int(len(feasible_nodes) * self.alpha))
-                rcl = feasible_nodes[:rcl_size]
+                rcl_size = max(1, int(len(feasible_nodes) * self.alpha))  # Tamaño de la lista restringida (RCL)
+                rcl = feasible_nodes[:rcl_size]  # Seleccionar la lista restringida
 
-                next_node = random.choice(rcl)
+                next_node = random.choice(rcl)  # Seleccionar aleatoriamente de la RCL
 
                 self.update_vehicle(vehicle, next_node)
                 unassigned.remove(next_node)
                 assigned_any = True
 
+            # Completar la ruta regresando al depósito
             vehicle.route.append(self.depot)
             vehicle.arrival_times.append(round(vehicle.time + self.distance(vehicle.route[-2], self.depot), 3))
             self.vehicles.append(vehicle)
@@ -108,32 +127,23 @@ class VRPTW:
 
         return self.vehicles
 
-    def two_opt(self, route):
-        best_route = route
-        best_distance = self.calculate_route_distance(route)
-
-        for i in range(1, len(route) - 2):
-            for j in range(i + 1, len(route) - 1):
-                new_route = route[:i] + route[i:j + 1][::-1] + route[j + 1:]
-                new_distance = self.calculate_route_distance(new_route)
-
-                if new_distance < best_distance:
-                    best_route = new_route
-                    best_distance = new_distance
-
-        return best_route
-
     def calculate_route_distance(self, route):
         total_distance = 0
         for i in range(len(route) - 1):
             total_distance += self.distance(route[i], route[i + 1])
         return total_distance
 
-    def local_search(self, solution):
-        for vehicle in solution:
-            improved_route = self.two_opt(vehicle.route)
-            vehicle.route = improved_route
-        return solution
+    def print_distance_matrix(self):
+        n = len(self.nodes)
+        distance_matrix = [[0] * n for _ in range(n)]
+        
+        for i in range(n):
+            for j in range(n):
+                distance_matrix[i][j] = round(math.sqrt((self.nodes[i].x - self.nodes[j].x)**2 + (self.nodes[i].y - self.nodes[j].y)**2), 3)
+        
+        print("Matriz de Distancias:")
+        for row in distance_matrix:
+            print(row)
 
 def read_instance(filename):
     with open(filename, 'r') as f:
@@ -159,22 +169,22 @@ def save_results_to_excel(instance_name, vehicles, total_distance, computation_t
 
     for vehicle in used_vehicles:
         route = [node.id for node in vehicle.route]
-        arrival_times = vehicle.arrival_times
-        route_info = [len(route) - 2] + route + arrival_times + [vehicle.load]
-        sheet.append(route_info )
+        adjusted_times = [max(at, node.early) for at, node in zip(vehicle.arrival_times, vehicle.route)]
+
+        route_info = [len(route) - 2] + route + adjusted_times + [vehicle.load]
+        sheet.append(route_info)
 
     workbook.save(OUTPUT_FILE)
 
 def solve_instance(instance_path):
     nodes, capacity = read_instance(instance_path)
     vrptw = VRPTW(nodes, capacity)
-
+    vrptw.print_distance_matrix()
     start_time = time.time()
     solution = vrptw.construct_solution()
-    solution = vrptw.local_search(solution)
     end_time = time.time()
 
-    computation_time = (end_time - start_time) * 1000  
+    computation_time = (end_time - start_time) * 1000  # Tiempo en milisegundos
     total_distance = vrptw.calculate_total_distance()
 
     routes = [(vehicle.route, vehicle.arrival_times[-1], vehicle.load) for vehicle in solution]
@@ -188,7 +198,6 @@ def grasp(instance, max_iterations=10, alpha=0.1):
     for _ in range(max_iterations):
         vrptw = VRPTW(instance.nodes, instance.vehicle_capacity, alpha)
         solution = vrptw.construct_solution()
-        solution = vrptw.local_search(solution)
 
         total_distance = vrptw.calculate_total_distance()
 

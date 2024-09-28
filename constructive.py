@@ -1,7 +1,6 @@
 import os
 import openpyxl
 from openpyxl import Workbook
-from openpyxl.styles import Font
 import math
 import time
 
@@ -33,6 +32,18 @@ class VRPTW:
         self.depot = nodes[0]
         self.vehicles = []
 
+    def print_distance_matrix(self):
+        n = len(self.nodes)
+        distance_matrix = [[0] * n for _ in range(n)]
+        
+        for i in range(n):
+            for j in range(n):
+                distance_matrix[i][j] = round(math.sqrt((self.nodes[i].x - self.nodes[j].x)**2 + (self.nodes[i].y - self.nodes[j].y)**2), 3)
+        
+        print("Matriz de Distancias:")
+        for row in distance_matrix:
+            print(row)
+
     def distance(self, node1, node2):
         return round(math.sqrt((node1.x - node2.x)**2 + (node1.y - node2.y)**2), 3)
 
@@ -41,7 +52,7 @@ class VRPTW:
         for vehicle in self.vehicles:
             route = vehicle.route
             for i in range(len(route) - 1):
-                total_distance += self.distance(route[i], route[i+1])
+                total_distance += self.distance(route[i], route[i + 1])
         return round(total_distance, 3)
 
     def is_feasible(self, vehicle, node):
@@ -60,11 +71,21 @@ class VRPTW:
         return True
 
     def update_vehicle(self, vehicle, node):
-        vehicle.route.append(node)
-        vehicle.load += node.demand
-        arrival_time = vehicle.time + self.distance(vehicle.route[-2], node)
+        arrival_time = vehicle.time + self.distance(vehicle.route[-1], node)
         service_start = max(arrival_time, node.early)
         vehicle.time = service_start + node.service_time
+        
+        print(f"Node {node.id} added to vehicle {vehicle}")
+        print(f"Arrival Time: {arrival_time}")
+        print(f"Service Start: {service_start}")
+        print(f"Vehicle Time: {vehicle.time}")
+        print(f"Vehicle Load: {vehicle.load}")
+        print(f"Vehicle Route: {[node.id for node in vehicle.route]}")
+        print(f"Vehicle Arrival Times: {vehicle.arrival_times}")
+        print()
+        
+        vehicle.route.append(node)
+        vehicle.load += node.demand
         vehicle.arrival_times.append(round(arrival_time, 3))
 
     def construct_solution(self):
@@ -126,18 +147,17 @@ def save_results_to_excel(instance_name, vehicles, total_distance, computation_t
     
     for vehicle in used_vehicles:
         route = [node.id for node in vehicle.route]
-        arrival_times = vehicle.arrival_times
+        adjusted_times = [max(at, node.early) for at, node in zip(vehicle.arrival_times, vehicle.route)]
 
-        route_info = [len(route) - 2] + route + arrival_times + [vehicle.load]
+        route_info = [len(route) - 2] + route + adjusted_times + [vehicle.load]
         sheet.append(route_info)
 
     workbook.save(OUTPUT_FILE)
 
-
-
 def solve_instance(instance_path):
     nodes, capacity = read_instance(instance_path)
     vrptw = VRPTW(nodes, capacity)
+    vrptw.print_distance_matrix()
 
     start_time = time.time()
     solution = vrptw.construct_solution()
@@ -156,6 +176,16 @@ def main():
             instance_path = os.path.join(INSTANCES_DIR, instance_filename)
             instance_name = instance_filename.replace('.txt', '')
             vehicles, total_distance, computation_time, routes, vehicle_capacity = solve_instance(instance_path)
+            print(f"Vehicles: {len(vehicles)}")
+            print(f"Total Distance: {total_distance}")
+            print(f"Computation Time: {computation_time:.2f} ms")
+            print(f"Vehicle Capacity: {vehicle_capacity}")
+            print("Routes:")
+            for i, (route, arrival_time, load) in enumerate(routes, 1):
+                print(f"  Route {i}:")
+                print(f"    Nodes: {' -> '.join(str(node.id) for node in route)}")
+                print(f"    Arrival Time: {arrival_time:.2f}")
+                print(f"    Load: {load}")
             save_results_to_excel(instance_name, vehicles, total_distance, computation_time, vehicle_capacity)
 
 if __name__ == '__main__':

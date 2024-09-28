@@ -62,11 +62,21 @@ class VRPTW:
         return True
 
     def update_vehicle(self, vehicle, node):
-        vehicle.route.append(node)
-        vehicle.load += node.demand
-        arrival_time = vehicle.time + self.distance(vehicle.route[-2], node)
+        arrival_time = vehicle.time + self.distance(vehicle.route[-1], node)
         service_start = max(arrival_time, node.early)
         vehicle.time = service_start + node.service_time
+        
+        print(f"Node {node.id} added to vehicle {vehicle}")
+        print(f"Arrival Time: {arrival_time}")
+        print(f"Service Start: {service_start}")
+        print(f"Vehicle Time: {vehicle.time}")
+        print(f"Vehicle Load: {vehicle.load}")
+        print(f"Vehicle Route: {[node.id for node in vehicle.route]}")
+        print(f"Vehicle Arrival Times: {vehicle.arrival_times}")
+        print()
+        
+        vehicle.route.append(node)
+        vehicle.load += node.demand
         vehicle.arrival_times.append(round(arrival_time, 3))
 
     def construct_solution(self):
@@ -134,9 +144,9 @@ def save_results_to_excel(instance_name, vehicles, total_distance, computation_t
     
     for vehicle in used_vehicles:
         route = [node.id for node in vehicle.route]
-        arrival_times = vehicle.arrival_times
-        
-        route_info = [len(route) - 2] + route + arrival_times + [vehicle.load]
+        adjusted_times = [max(at, node.early) for at, node in zip(vehicle.arrival_times, vehicle.route)]
+
+        route_info = [len(route) - 2] + route + adjusted_times + [vehicle.load]
         sheet.append(route_info)
         
     workbook.save(OUTPUT_FILE)
