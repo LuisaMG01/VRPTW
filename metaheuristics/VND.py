@@ -5,7 +5,7 @@ import math
 import time
 import copy
 
-OUTPUT_FILE = 'VRPTW_LuisaMariaAlvarez_VND.xlsx'
+OUTPUT_FILE = 'VRPTW_LuisaMariaAlvarez_VND_5.xlsx'
 INSTANCES_DIR = 'instances'  
 
 class Node:
@@ -191,7 +191,7 @@ class VRPTW:
 
             for v1_index, vehicle1 in enumerate(self.vehicles):
                 for i in range(1, len(vehicle1.route) - 1): 
-                    
+                    node = vehicle1.route[i]
                     for j in range(1, len(vehicle1.route) - 1):
                         if i != j and i != j - 1:
                             new_route = vehicle1.route[:i] + vehicle1.route[i+1:]
@@ -288,7 +288,7 @@ def save_results_to_excel(instance_name, vehicles, total_distance, computation_t
         workbook = openpyxl.load_workbook(OUTPUT_FILE)
 
     sheet = workbook.create_sheet(title=instance_name)
-
+    
     used_vehicles = [vehicle for vehicle in vehicles if len(vehicle.route) > 2]
 
     sheet.append([len(used_vehicles), round(total_distance, 3), round(computation_time, 3)])
@@ -303,22 +303,82 @@ def save_results_to_excel(instance_name, vehicles, total_distance, computation_t
     workbook.save(OUTPUT_FILE)
 
 
+class VND:
+    def __init__(self, vrptw, time_limit):
+        self.vrptw = vrptw
+        self.time_limit = time_limit
+        self.start_time = None
+        self.best_solution = None
+        self.best_distance = float('inf')
+        
+    def get_elapsed_time(self):
+        return time.time() - self.start_time
+        
+    def check_time_limit(self):
+        return self.get_elapsed_time() < self.time_limit
+
+    def apply_neighborhood(self, k):
+        if k == 0:
+            self.vrptw.relocation_best_improvement()
+        elif k == 1:
+            self.vrptw.two_opt_best_improvement()
+        elif k == 2:
+            self.vrptw.segment_exchange_best_improvement()
+
+    def save_best_solution(self):
+        self.best_solution = copy.deepcopy(self.vrptw.vehicles)
+        self.best_distance = self.vrptw.calculate_total_distance()
+
+    def restore_best_solution(self):
+        self.vrptw.vehicles = copy.deepcopy(self.best_solution)
+
+    def solve(self):
+        self.start_time = time.time()
+        k_max = 5
+
+        self.vrptw.construct_solution()
+        self.save_best_solution()
+        
+        while self.check_time_limit():
+            k = 0  
+            while k < k_max and self.check_time_limit():
+                current_distance = self.vrptw.calculate_total_distance()
+                self.apply_neighborhood(k)
+                new_distance = self.vrptw.calculate_total_distance()
+                
+                if new_distance < current_distance:
+                    self.save_best_solution()
+                    k = 0
+                else:
+                    k += 1
+                    
+        self.restore_best_solution()
+        return self.best_distance, self.get_elapsed_time() * 1000  # Return time in milliseconds
+
+def read_time_limit(instance_name):
+    # Read time limit from TimeLimit.xlsx
+    wb = openpyxl.load_workbook('TimeLimit.xlsx')
+    sheet = wb.active
+    for row in sheet.iter_rows(min_row=2):
+        if row[0].value == instance_name:
+            return float(row[1].value)
+    return 60  # Default time limit if not found
+
 def solve_instance(instance_path):
     nodes, capacity = read_instance(instance_path)
     vrptw = VRPTW(nodes, capacity)
-
-    start_time = time.time()
-    vrptw.construct_solution()
-    vrptw.relocation_best_improvement()
-    vrptw.two_opt_best_improvement()
-    vrptw.segment_exchange_best_improvement()
-    end_time = time.time()
-
-    computation_time = (end_time - start_time) * 1000  
-    total_distance = vrptw.calculate_total_distance()
-
-    routes = [(vehicle.route, vehicle.arrival_times[-1], vehicle.load) for vehicle in vrptw.vehicles]
-
+    
+    # Get instance name and time limit
+    instance_name = os.path.basename(instance_path).replace('.txt', '')
+    time_limit = read_time_limit(instance_name)
+    
+    # Create and run VND
+    vnd = VND(vrptw, time_limit)
+    total_distance, computation_time = vnd.solve()
+    
+    routes = [(vehicle.route, vehicle.arrival_times[-1], vehicle.load) 
+              for vehicle in vrptw.vehicles]
+    
     return vrptw.vehicles, total_distance, computation_time, routes, capacity
 
 def main():
@@ -326,9 +386,14 @@ def main():
         if instance_filename.endswith('.txt'):
             instance_path = os.path.join(INSTANCES_DIR, instance_filename)
             instance_name = instance_filename.replace('.txt', '')
-            vehicles, total_distance, computation_time, routes, vehicle_capacity = solve_instance(instance_path)
-            print(f"Instance: {instance_name}")
-            print(f"Vehicles: {len(vehicles)}")
+            
+            print(f"\nSolving instance: {instance_name}")
+            print(f"Time limit: {read_time_limit(instance_name)} seconds")
+            
+            vehicles, total_distance, computation_time, routes, vehicle_capacity = \
+                solve_instance(instance_path)
+            
+            print(f"Vehicles used: {len(vehicles)}")
             print(f"Total Distance: {total_distance}")
             print(f"Computation Time: {computation_time:.2f} ms")
             print(f"Vehicle Capacity: {vehicle_capacity}")
@@ -338,8 +403,9 @@ def main():
                 print(f"    Nodes: {' -> '.join(str(node.id) for node in route)}")
                 print(f"    Arrival Time: {arrival_time:.2f}")
                 print(f"    Load: {load}")
-            print()
-            save_results_to_excel(instance_name, vehicles, total_distance, computation_time, vehicle_capacity)
+            
+            save_results_to_excel(instance_name, vehicles, total_distance, 
+                                computation_time, vehicle_capacity)
 
 if __name__ == '__main__':
     main()
