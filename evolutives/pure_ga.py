@@ -7,7 +7,7 @@ from openpyxl import Workbook
 import math
 import time
 
-OUTPUT_FILE = 'pure_1.xlsx'
+OUTPUT_FILE = 'VRPTW_LuisaMariaAlvarez_pureGA.xlsx'
 INSTANCES_DIR = 'instances'  
 
 class Node:
