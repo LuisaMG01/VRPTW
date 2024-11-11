@@ -7,246 +7,8 @@ from openpyxl import Workbook
 import math
 import time
 
-OUTPUT_FILE = 'hybrid_.xlsx'
+OUTPUT_FILE = 'pure_1.xlsx'
 INSTANCES_DIR = 'instances'  
-
-class EvolutionaryLocalSearch:
-    def __init__(self, vrptw, iterations=100, population_size=10, local_search_iterations=20):
-        self.vrptw = vrptw
-        self.iterations = iterations
-        self.population_size = population_size
-        self.local_search_iterations = local_search_iterations
-        self.best_solution = None
-        self.best_fitness = float('inf')
-
-    def local_search(self, solution):
-        best_local = copy.deepcopy(solution)
-        best_local_fitness = self.calculate_fitness(best_local)
-
-        for _ in range(self.local_search_iterations):
-            current = copy.deepcopy(best_local)
-            
-            valid_routes = [v for v in current if len(v.route) > 2]
-            
-            if len(valid_routes) >= 2:
-                operators = ['relocate', '2-opt', 'exchange']
-            elif len(valid_routes) == 1:
-                operators = ['2-opt']  
-            else:
-                break 
-                
-            operator = random.choice(operators)
-
-            if operator == 'relocate':
-                self._relocate_move(current)
-            elif operator == '2-opt':
-                self._2opt_move(current)
-            else:
-                self._exchange_move(current)
-
-            current_fitness = self.calculate_fitness(current)
-            if current_fitness < best_local_fitness and self._is_feasible(current):
-                best_local = current
-                best_local_fitness = current_fitness
-
-        return best_local
-
-    def _relocate_move(self, solution):
-        valid_routes = [v for v in solution if len(v.route) > 2]
-        if len(valid_routes) < 2:
-            return
-
-        try:
-            route1, route2 = random.sample(valid_routes, 2)
-        except ValueError:
-            return
-        
-        if len(route1.route) <= 3:  
-            return
-
-        node_idx = random.randint(1, len(route1.route) - 2)
-        node = route1.route.pop(node_idx)
-        
-        best_pos = 1
-        best_cost = float('inf')
-        original_route2 = copy.deepcopy(route2.route)
-        
-        for i in range(1, len(route2.route)):
-            route2.route.insert(i, node)
-            if self._is_route_feasible(route2):
-                cost = self._calculate_route_cost(route2)
-                if cost < best_cost:
-                    best_pos = i
-                    best_cost = cost
-            route2.route = copy.deepcopy(original_route2)
-        
-        route2.route.insert(best_pos, node)
-        self._update_route_info(route1)
-        self._update_route_info(route2)
-
-    def _2opt_move(self, solution):
-        valid_routes = [v for v in solution if len(v.route) > 3]
-        if not valid_routes:
-            return
-
-        vehicle = random.choice(valid_routes)
-        original_route = copy.deepcopy(vehicle.route)
-        best_distance = self._calculate_route_cost(vehicle)
-        best_route = None
-        
-        for i in range(1, len(original_route) - 2):
-            for j in range(i + 1, len(original_route) - 1):
-                new_route = original_route[:i] + list(reversed(original_route[i:j+1])) + original_route[j+1:]
-                vehicle.route = new_route
-                
-                if self._is_route_feasible(vehicle):
-                    current_distance = self._calculate_route_cost(vehicle)
-                    if current_distance < best_distance:
-                        best_distance = current_distance
-                        best_route = copy.deepcopy(new_route)
-                
-                vehicle.route = copy.deepcopy(original_route)
-        
-        if best_route:
-            vehicle.route = best_route
-            self._update_route_info(vehicle)
-
-    def _exchange_move(self, solution):
-        valid_routes = [v for v in solution if len(v.route) > 2]
-        if len(valid_routes) < 2:
-            return
-
-        try:
-            route1, route2 = random.sample(valid_routes, 2)
-        except ValueError:
-            return
-
-        original_route1 = copy.deepcopy(route1.route)
-        original_route2 = copy.deepcopy(route2.route)
-        
-        best_cost = self._calculate_route_cost(route1) + self._calculate_route_cost(route2)
-        best_exchange = None
-        
-        for i in range(1, len(route1.route) - 1):
-            for j in range(1, len(route2.route) - 1):
-                route1.route[i], route2.route[j] = route2.route[j], route1.route[i]
-                
-                if self._is_route_feasible(route1) and self._is_route_feasible(route2):
-                    current_cost = self._calculate_route_cost(route1) + self._calculate_route_cost(route2)
-                    if current_cost < best_cost:
-                        best_cost = current_cost
-                        best_exchange = (i, j)
-                
-                route1.route = copy.deepcopy(original_route1)
-                route2.route = copy.deepcopy(original_route2)
-        
-        if best_exchange:
-            i, j = best_exchange
-            route1.route[i], route2.route[j] = route2.route[j], route1.route[i]
-            self._update_route_info(route1)
-            self._update_route_info(route2)
-
-    def _is_feasible(self, solution):
-        return all(self._is_route_feasible(vehicle) for vehicle in solution)
-
-    def _is_route_feasible(self, vehicle):
-        if not vehicle.route:
-            return True
-
-        current_time = 0
-        current_load = 0
-        
-        for i in range(len(vehicle.route) - 1):
-            current = vehicle.route[i]
-            next_node = vehicle.route[i + 1]
-            
-            travel_time = self.vrptw.distance(current, next_node)
-            arrival_time = current_time + travel_time
-            
-            if arrival_time > next_node.late:
-                return False
-            
-            service_start = max(arrival_time, next_node.early)
-            current_time = service_start + next_node.service_time
-            
-            if i < len(vehicle.route) - 1: 
-                current_load += next_node.demand
-                if current_load > vehicle.capacity:
-                    return False
-
-        return True
-
-    def _update_route_info(self, vehicle):
-        current_time = 0
-        current_load = 0
-        arrival_times = [0]
-        
-        for i in range(len(vehicle.route) - 1):
-            current = vehicle.route[i]
-            next_node = vehicle.route[i + 1]
-            
-            travel_time = self.vrptw.distance(current, next_node)
-            arrival_time = current_time + travel_time
-            service_start = max(arrival_time, next_node.early)
-            current_time = service_start + next_node.service_time
-            
-            arrival_times.append(round(arrival_time, 3))
-            if i < len(vehicle.route) - 1:
-                current_load += next_node.demand
-
-        vehicle.time = current_time
-        vehicle.load = current_load
-        vehicle.arrival_times = arrival_times
-
-    def _calculate_route_cost(self, vehicle):
-        total_distance = 0
-        route = vehicle.route
-        for i in range(len(route) - 1):
-            total_distance += self.vrptw.distance(route[i], route[i + 1])
-        return total_distance
-
-    def calculate_fitness(self, solution):
-        num_vehicles = len([v for v in solution if len(v.route) > 2])
-        total_distance = sum(self._calculate_route_cost(v) for v in solution)
-        return num_vehicles * 10000 + total_distance
-
-    def optimize(self, initial_solution):
-        self.best_solution = copy.deepcopy(initial_solution)
-        self.best_fitness = self.calculate_fitness(self.best_solution)
-
-        for iteration in range(self.iterations):
-            population = [copy.deepcopy(self.best_solution)]
-            
-            while len(population) < self.population_size:
-                mutated = copy.deepcopy(self.best_solution)
-                for _ in range(random.randint(1, 3)):
-                    operator = random.choice(['relocate', '2-opt', 'exchange'])
-                    if operator == 'relocate':
-                        self._relocate_move(mutated)
-                    elif operator == '2-opt':
-                        self._2opt_move(mutated)
-                    else:
-                        self._exchange_move(mutated)
-                population.append(mutated)
-
-            for i in range(len(population)):
-                improved = self.local_search(population[i])
-                if self._is_feasible(improved):
-                    population[i] = improved
-
-            for solution in population:
-                fitness = self.calculate_fitness(solution)
-                if fitness < self.best_fitness and self._is_feasible(solution):
-                    self.best_solution = copy.deepcopy(solution)
-                    self.best_fitness = fitness
-
-            if (iteration + 1) % 10 == 0:
-                print(f"Iteración ELS {iteration + 1}/{self.iterations}")
-                print(f"Mejor fitness: {self.best_fitness}")
-                print(f"Número de vehículos: {len([v for v in self.best_solution if len(v.route) > 2])}")
-                print(f"Distancia total: {sum(self._calculate_route_cost(v) for v in self.best_solution)}\n")
-
-        return self.best_solution, self.best_fitness
 
 class Node:
     def __init__(self, id, x, y, demand, early, late, service_time):
@@ -267,6 +29,7 @@ class Vehicle:
         self.arrival_times = []
 
 
+
 class VRPTW:
     def __init__(self, nodes, vehicle_capacity):
         self.nodes = nodes
@@ -283,6 +46,7 @@ class VRPTW:
             for j in range(n):
                 distance_matrix[i][j] = round(math.sqrt((self.nodes[i].x - self.nodes[j].x)**2 + (self.nodes[i].y - self.nodes[j].y)**2), 3)
         
+        print("Matriz de Distancias:")
         for row in distance_matrix:
             print(row)
 
@@ -350,54 +114,6 @@ class VRPTW:
             vehicle.load += curr_node.demand
         
         vehicle.time = time
-
-    def relocation_best_improvement(self):
-        improved = True
-        while improved:
-            improved = False
-            best_improvement = 0
-            best_move = None
-
-            for v1_index, vehicle1 in enumerate(self.vehicles):
-                for i in range(1, len(vehicle1.route) - 1):  
-                    node = vehicle1.route[i]
-                    
-                    for j in range(1, len(vehicle1.route) - 1):
-                        if i != j and i != j - 1:
-                            new_route = vehicle1.route[:i] + vehicle1.route[i+1:]
-                            new_route = new_route[:j] + [node] + new_route[j:]
-                            if self.is_route_feasible(new_route):
-                                improvement = self.route_distance(vehicle1.route) - self.route_distance(new_route)
-                                if improvement > best_improvement:
-                                    best_improvement = improvement
-                                    best_move = (v1_index, v1_index, i, j)
-
-                    for v2_index, vehicle2 in enumerate(self.vehicles):
-                        if v1_index != v2_index:
-                            for j in range(1, len(vehicle2.route)):
-                                new_route1 = vehicle1.route[:i] + vehicle1.route[i+1:]
-                                new_route2 = vehicle2.route[:j] + [node] + vehicle2.route[j:]
-                                if self.is_route_feasible(new_route1) and self.is_route_feasible(new_route2):
-                                    improvement = (self.route_distance(vehicle1.route) + self.route_distance(vehicle2.route)) - \
-                                                  (self.route_distance(new_route1) + self.route_distance(new_route2))
-                                    if improvement > best_improvement:
-                                        best_improvement = improvement
-                                        best_move = (v1_index, v2_index, i, j)
-
-            if best_move:
-                v1_index, v2_index, i, j = best_move
-                node = self.vehicles[v1_index].route[i]
-                
-                del self.vehicles[v1_index].route[i]
-                self.vehicles[v1_index].load -= node.demand
-                
-                self.vehicles[v2_index].route.insert(j, node)
-                self.vehicles[v2_index].load += node.demand
-                
-                self.update_vehicle_times(self.vehicles[v1_index])
-                self.update_vehicle_times(self.vehicles[v2_index])
-                
-                improved = True
 
     def construct_solution(self):
         unassigned = self.nodes[1:]
@@ -614,6 +330,7 @@ class GeneticVRPTW:
                 new_population.append(child)
             
             population = new_population
+            
             if (generation + 1) % 10 == 0:
                 print(f"Generación {generation + 1}/{self.generations}")
                 print(f"Mejor fitness: {self.best_fitness}")
@@ -629,8 +346,6 @@ def solve_instance_with_ga(instance_path):
     print("Generando solución constructiva inicial...")
     constructive_solution = vrptw.construct_solution()
     
-    print("Aplicando mejora por reubicación...")
-    vrptw.relocation_best_improvement()  
     constructive_distance = vrptw.calculate_total_distance()
     
     constructive_solution = vrptw.vehicles
@@ -640,11 +355,8 @@ def solve_instance_with_ga(instance_path):
     print("\nAplicando algoritmo genético...")
     ga = GeneticVRPTW(vrptw)
     start_time = time.time()
-    ga_solution, ga_fitness = ga.optimize(constructive_solution)
+    best_solution, ga_fitness = ga.optimize(constructive_solution)
     
-    print("\nAplicando búsqueda local evolutiva...")
-    els = EvolutionaryLocalSearch(vrptw)
-    best_solution, best_fitness = els.optimize(ga_solution)
     
     computation_time = (time.time() - start_time) * 1000
     
@@ -662,7 +374,7 @@ def solve_instance_with_ga(instance_path):
 
 def update_vehicle_times(self, vehicle):
     time = 0
-    arrival_times = [0] 
+    arrival_times = [0]  
     
     for i in range(1, len(vehicle.route)):
         current_node = vehicle.route[i-1]
